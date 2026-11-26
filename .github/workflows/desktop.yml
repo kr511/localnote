@@ -43,6 +43,17 @@ jobs:
         working-directory: desktop
         run: npm run dist:win
 
+      - name: Startet die App? (Smoke-Test)
+        shell: pwsh
+        run: |
+          $env:LOCALNOTE_DB = "$env:RUNNER_TEMP\smoke.db"
+          $p = Start-Process -FilePath "desktop\release\win-unpacked\LocalNote.exe" -PassThru
+          Start-Sleep -Seconds 20
+          $ok = Test-Path $env:LOCALNOTE_DB
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          if (-not $ok) { throw "LocalNote.exe hat die Datenbank nicht angelegt (Server nicht gestartet)" }
+          Write-Host "OK: Datenbank angelegt, Server läuft in der gepackten App"
+
       - name: .exe als Artefakt hochladen
         uses: actions/upload-artifact@v4
         with:
