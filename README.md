@@ -111,6 +111,6 @@ npm run dist:win   # Ergebnis in desktop/release/
 npm run desktop    # Desktop-App starten, ohne zu packen
 ```
 
-Neue Version veröffentlichen: Version in `desktop/package.json` hochsetzen, Tag `vX.Y.Z` pushen. GitHub Actions baut die .exe und hängt sie ans Release.
+Neue Version veröffentlichen: Version in `desktop/package.json` hochsetzen, dann auf GitHub ein Release mit Tag `vX.Y.Z` anlegen (oder den Tag pushen). GitHub Actions baut die .exe und hängt sie ans Release.
 
 Architektur, Datenbankschema und API stehen in [`CLAUDE.md`](./CLAUDE.md).

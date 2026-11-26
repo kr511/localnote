@@ -3,6 +3,8 @@ name: Windows-App bauen
 on:
   push:
     tags: ['v*']
+  release:
+    types: [published]
   pull_request:
   workflow_dispatch:
 
@@ -62,7 +64,7 @@ jobs:
           if-no-files-found: error
 
       - name: Release veröffentlichen
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: desktop/release/*.exe
