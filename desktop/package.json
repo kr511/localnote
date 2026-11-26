@@ -8,10 +8,11 @@
   "main": "dist/main.cjs",
   "scripts": {
     "build": "node build.mjs",
-    "start": "npm run build && electron .",
+    "start": "npm run electron:install && npm run build && electron .",
     "typecheck": "tsc --noEmit",
     "dist:win": "npm run build && electron-builder --win --publish never",
-    "dist:dir": "npm run build && electron-builder --dir --publish never"
+    "dist:dir": "npm run build && electron-builder --dir --publish never",
+    "electron:install": "node node_modules/electron/install.js"
   },
   "dependencies": {
     "better-sqlite3": "^13.2.0"
