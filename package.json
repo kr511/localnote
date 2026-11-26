@@ -1,0 +1,23 @@
+{
+  "name": "localnote",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lokale RemNote-Alternative: Outliner-Notizen, automatische Karteikarten, FSRS-Lernmodus.",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n api,web -c magenta,cyan \"npm:dev -w server\" \"npm:dev -w client\"",
+    "build": "npm run build -w client",
+    "start": "npm run build && npm run start -w server",
+    "test": "npm test -w server",
+    "typecheck": "npm run typecheck -w server && npm run typecheck -w client"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

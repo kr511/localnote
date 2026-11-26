@@ -35,9 +35,12 @@ localnote.db
 - **Monorepo mit npm workspaces**: `server/` und `client/`. Root-`package.json` hat nur Orchestrierung (`concurrently`).
 - **Speichern**: Der Editor schickt nach 400 ms ohne Tippen die komplette Blockliste der Seite an `PUT /api/pages/:id/blocks`. Der Server ersetzt die Blöcke in einer Transaktion und synchronisiert danach die Karten der Seite.
 - **Karten-Sync**: `server/src/parser.ts` erkennt Karten pro Block. Jede Karte hat einen stabilen Schlüssel `(block_id, slot)`. Ändert sich nur der Text, bleibt der FSRS-Zustand erhalten. Verschwindet ein Slot, wird die Karte gelöscht.
+- **Ein Parser für beide Seiten**: `shared/parser.ts` wird vom Server (Karten-Sync) und vom Client (Badge beim Tippen) importiert. Nie duplizieren.
+- **Nur localhost**: Der Server bindet an `127.0.0.1`, weil es keine Authentifizierung gibt.
 - **Block-IDs** erzeugt der Client (`crypto.randomUUID()`), damit Speichern idempotent ist und Karten ihren Block behalten.
 - **Outliner flach gespeichert**: Blöcke sind eine geordnete Liste mit `indent` (0..n) statt eines echten Baums. Das macht Tab/Shift+Tab, Umsortieren und Speichern trivial; die Hierarchie ergibt sich aus Reihenfolge + Einrückung.
-- **FSRS**: `server/src/srs.ts` kapselt `ts-fsrs`. Der Client rechnet nichts selbst, er bekommt fällige Karten inkl. Intervall-Vorschau pro Bewertung und schickt nur die Bewertung 1 bis 4 zurück.
+- **FSRS**: `server/src/srs.ts` kapselt `ts-fsrs` (Fuzz an). Der Client rechnet nichts selbst, er bekommt fällige Karten inkl. Intervall-Vorschau pro Bewertung und schickt nur die Bewertung 1 bis 4 zurück. Die Antwort enthält die aktualisierte Karte; ist sie in unter 20 Minuten wieder fällig (Lernschritte), hängt der Client sie hinten an die aktuelle Session an.
+- **Suche**: `LIKE` über eine eigene SQL-Funktion `ulower()` (registriert in `db.ts`), weil SQLites `LOWER()` keine Umlaute faltet.
 
 ## Karteikarten-Syntax
 
@@ -56,6 +59,8 @@ localnote/
 ├── CLAUDE.md
 ├── README.md
 ├── package.json              # workspaces + dev/start/test-Skripte
+├── shared/
+│   └── parser.ts             # Karten-Erkennung, von Server UND Client importiert (eine Quelle)
 ├── server/
 │   ├── package.json
 │   ├── tsconfig.json
@@ -63,7 +68,8 @@ localnote/
 │   │   ├── index.ts          # Einstieg: DB öffnen, App starten, in Prod client/dist ausliefern
 │   │   ├── app.ts            # createApp(db): Express-App mit allen Routen (testbar)
 │   │   ├── db.ts             # openDb(), Schema + Migrationen
-│   │   ├── parser.ts         # Karten-Erkennung aus Blocktext
+│   │   ├── parser.ts         # re-exportiert shared/parser.ts
+│   │   ├── http.ts           # HttpError, Validierungshelfer, Error-Middleware
 │   │   ├── srs.ts            # FSRS-Wrapper (ts-fsrs)
 │   │   ├── cards.ts          # syncPageCards(): Blöcke -> Karten
 │   │   └── routes/
@@ -81,13 +87,15 @@ localnote/
         ├── App.tsx           # Layout: Sidebar | Hauptbereich, globale Shortcuts
         ├── api.ts            # typisierte fetch-Wrapper
         ├── types.ts          # geteilte Typen (Subject, Page, Block, Card, ...)
-        ├── lib/parse.ts      # gleiche Karten-Erkennung wie Server, nur fürs Badge
+        ├── lib/outline.ts    # Outliner-Logik: Teilbaum ein-/ausrücken, Einfügen von Listen
         └── components/
             ├── Sidebar.tsx       # Fächer- und Seitenbaum
             ├── Editor.tsx        # Outliner, Debounce-Speichern
             ├── BlockRow.tsx      # ein Block: Textarea, Badge, Tastatur
             ├── StudyView.tsx     # "Heute lernen"
-            └── SearchPalette.tsx # Strg+K
+            ├── SearchPalette.tsx # Strg+K
+            ├── Home.tsx          # Startseite / leerer Zustand
+            └── InlineInput.tsx   # Anlegen/Umbenennen in der Sidebar
 ```
 
 ## Datenbank-Schema
@@ -170,8 +178,9 @@ Migrationen laufen über `PRAGMA user_version` in `db.ts` (jede Version ein SQL-
 | DELETE | `/pages/:id` | |
 | PUT | `/pages/:id/blocks` | `{blocks: [{id, indent, content}]}` in Reihenfolge, gibt Karten-Infos zurück |
 | GET | `/study/due?subjectId=` | fällige Karten (+ Intervall-Vorschau), Zähler pro Fach |
-| POST | `/study/:cardId/review` | `{rating: 1..4}` -> FSRS, speichert Karte + Log |
-| GET | `/search?q=` | Treffer in Seitentiteln und Blöcken |
+| POST | `/study/:cardId/review` | `{rating: 1..4}` -> FSRS, speichert Karte + Log, gibt `{due, state, card}` zurück |
+| GET | `/search?q=` | Treffer in Seitentiteln und Blöcken (leeres `q`: zuletzt bearbeitete Seiten) |
+| GET | `/health` | `{ok: true}` |
 
 ## Konventionen
 
