@@ -1,23 +1,27 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from './api';
-import type { Subject, View } from './types';
+import type { ExamSummary, Subject, View } from './types';
 import Sidebar from './components/Sidebar';
 import Editor from './components/Editor';
 import StudyView from './components/StudyView';
 import SearchPalette from './components/SearchPalette';
 import Home from './components/Home';
+import ExamsView from './components/ExamsView';
+import SettingsView from './components/SettingsView';
 
 export default function App() {
   const [tree, setTree] = useState<Subject[]>([]);
   const [view, setView] = useState<View>({ type: 'home' });
   const [dueTotal, setDueTotal] = useState(0);
+  const [exams, setExams] = useState<ExamSummary[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const [t, due] = await Promise.all([api.tree(), api.due()]);
+      const [t, due, ex] = await Promise.all([api.tree(), api.due(), api.exams()]);
       setTree(t);
+      setExams(ex);
       setDueTotal(due.counts.reduce((n, c) => n + c.due, 0));
       setError(null);
     } catch (e) {
@@ -54,6 +58,7 @@ export default function App() {
         tree={tree}
         view={view}
         dueTotal={dueTotal}
+        exams={exams}
         onNavigate={setView}
         onChanged={refresh}
         onSearch={() => setSearchOpen(true)}
@@ -80,13 +85,17 @@ export default function App() {
         )}
         {view.type === 'study' && (
           <StudyView
-            key={view.subjectId ?? 'all'}
+            key={`${view.subjectId ?? 'all'}-${view.examId ?? ''}-${view.cram ? 'cram' : ''}`}
             subjectId={view.subjectId}
+            examId={view.examId}
+            cram={view.cram}
             onNavigate={setView}
             onReviewed={refresh}
             onError={setError}
           />
         )}
+        {view.type === 'exams' && <ExamsView tree={tree} onNavigate={setView} onChanged={refresh} onError={setError} />}
+        {view.type === 'settings' && <SettingsView onError={setError} />}
       </main>
       {searchOpen && (
         <SearchPalette
