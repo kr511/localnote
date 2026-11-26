@@ -57,7 +57,7 @@ localnote.db
 - better-sqlite3 (ab v13) bringt N-API-Prebuilds für alle Plattformen mit. Deshalb `npmRebuild: false` in der electron-builder-Config, und die Prebuilds werden aus dem asar entpackt (`asarUnpack`).
 - Single-Instance-Lock: ein zweiter Start fokussiert das vorhandene Fenster. Externe Links öffnen im System-Browser.
 - Mikrofon im Feynman-Panel ist in Electron ausgeblendet (die Web-Speech-API hat dort keinen Dienst dahinter).
-- Release: `.github/workflows/desktop.yml` baut auf `windows-latest` bei jedem PR (Artefakt) und bei Tags `v*` (GitHub Release mit `LocalNote-Setup-x.y.z.exe` und `LocalNote-x.y.z-portable.exe`). Die .exe ist nicht code-signiert, SmartScreen warnt beim ersten Start.
+- Release: `.github/workflows/desktop.yml` baut auf `windows-latest` bei jedem PR (Artefakt); bei Push auf `main` legt er das Release `v<version aus desktop/package.json>` an, falls es noch nicht existiert (auch bei Tags `v*` und per Hand; GitHub Release mit `LocalNote-Setup-x.y.z.exe` und `LocalNote-x.y.z-portable.exe`). Die .exe ist nicht code-signiert, SmartScreen warnt beim ersten Start.
 
 ## Karteikarten-Syntax
 

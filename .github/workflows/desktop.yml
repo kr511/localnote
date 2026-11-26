@@ -2,6 +2,7 @@ name: Windows-App bauen
 
 on:
   push:
+    branches: [main]
     tags: ['v*']
   release:
     types: [published]
@@ -63,9 +64,41 @@ jobs:
           path: desktop/release/*.exe
           if-no-files-found: error
 
+      - name: Version bestimmen
+        id: ver
+        shell: bash
+        run: echo "tag=v$(node -p "require('./desktop/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      # Auf main (oder per Hand gestartet): Release für die Version aus desktop/package.json anlegen,
+      # falls es sie noch nicht gibt. Version hochsetzen = neues Release.
+      - name: Release vorhanden?
+        id: exists
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${{ steps.ver.outputs.tag }}" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Release veröffentlichen
-        if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')
+        if: >-
+          github.event_name == 'release' ||
+          startsWith(github.ref, 'refs/tags/v') ||
+          steps.exists.outputs.skip == 'false'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event_name == 'release' && github.event.release.tag_name || (startsWith(github.ref, 'refs/tags/') && github.ref_name || steps.ver.outputs.tag) }}
+          name: LocalNote ${{ steps.ver.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           files: desktop/release/*.exe
           generate_release_notes: true
+          body: |
+            **Download:** `LocalNote-Setup-*.exe` (empfohlen: installiert ohne Admin, Desktop-Verknüpfung) oder `LocalNote-*-portable.exe` (ohne Installation).
+
+            Windows warnt beim ersten Start, weil die App nicht signiert ist: **Weitere Informationen → Trotzdem ausführen**.
+
+            Daten liegen in `%APPDATA%\LocalNote\localnote.db`. Für den Feynman-Check Ollama separat installieren (siehe README).
