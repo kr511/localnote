@@ -12,7 +12,9 @@
     "build": "npm run build -w client",
     "start": "npm run build && npm run start -w server",
     "test": "npm test -w server",
-    "typecheck": "npm run typecheck -w server && npm run typecheck -w client"
+    "typecheck": "npm run typecheck -w server && npm run typecheck -w client",
+    "desktop": "npm run build && npm --prefix desktop install && npm --prefix desktop start",
+    "dist:win": "npm run build && npm --prefix desktop ci && npm --prefix desktop run dist:win"
   },
   "devDependencies": {
     "concurrently": "^9.2.5"

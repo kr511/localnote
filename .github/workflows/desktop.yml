@@ -1,0 +1,58 @@
+name: Windows-App bauen
+
+on:
+  push:
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            desktop/package-lock.json
+
+      - name: Abhängigkeiten installieren
+        run: npm ci
+
+      - name: Tests
+        run: npm test
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Oberfläche bauen
+        run: npm run build
+
+      - name: Desktop-Abhängigkeiten
+        working-directory: desktop
+        run: npm ci
+
+      - name: .exe bauen
+        working-directory: desktop
+        run: npm run dist:win
+
+      - name: .exe als Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: LocalNote-Windows
+          path: desktop/release/*.exe
+          if-no-files-found: error
+
+      - name: Release veröffentlichen
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: desktop/release/*.exe
+          generate_release_notes: true

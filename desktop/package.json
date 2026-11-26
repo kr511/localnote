@@ -1,0 +1,82 @@
+{
+  "name": "localnote-desktop",
+  "productName": "LocalNote",
+  "version": "0.2.0",
+  "description": "LocalNote als Desktop-App: Notizen, automatische Karteikarten, FSRS, alles lokal.",
+  "author": "Eli",
+  "private": true,
+  "main": "dist/main.cjs",
+  "scripts": {
+    "build": "node build.mjs",
+    "start": "npm run build && electron .",
+    "typecheck": "tsc --noEmit",
+    "dist:win": "npm run build && electron-builder --win --publish never",
+    "dist:dir": "npm run build && electron-builder --dir --publish never"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.2.0"
+  },
+  "build": {
+    "appId": "app.localnote.desktop",
+    "productName": "LocalNote",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "LocalNote",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "LocalNote-Setup-${version}.exe"
+    },
+    "portable": {
+      "artifactName": "LocalNote-${version}-portable.exe"
+    },
+    "linux": {
+      "target": [
+        "dir"
+      ],
+      "icon": "build/icon.png"
+    },
+    "npmRebuild": false,
+    "asarUnpack": [
+      "node_modules/better-sqlite3/prebuilds/**"
+    ]
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.11",
+    "electron": "^45.5.0",
+    "electron-builder": "^26.18.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kr511/localnote.git"
+  }
+}

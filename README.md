@@ -4,11 +4,25 @@ Schnelle, komplett lokale Alternative zu RemNote für die Schule. Du schreibst N
 
 Kein Account, keine Cloud. Alles liegt in einer einzigen Datei: `localnote.db`.
 
-## Voraussetzungen
+## Windows-App (.exe), ohne Terminal
+
+1. Auf GitHub unter **Releases** die neueste Version öffnen und `LocalNote-Setup-x.y.z.exe` herunterladen.
+2. Doppelklick. LocalNote installiert sich in deinen Benutzerordner (kein Admin nötig), legt eine Verknüpfung auf den Desktop und startet.
+3. Windows zeigt beim ersten Mal evtl. **"Der Computer wurde durch Windows geschützt"**, weil die App nicht kostenpflichtig signiert ist. Dann auf **Weitere Informationen → Trotzdem ausführen** klicken.
+
+Alternativ `LocalNote-x.y.z-portable.exe`: läuft ohne Installation, startet aber jedes Mal ein paar Sekunden langsamer.
+
+Deine Daten liegen in `%APPDATA%\LocalNote\localnote.db` und bleiben bei Updates und Deinstallation erhalten. Updates: einfach die neue Setup-Datei ausführen.
+
+Für den Feynman-Check brauchst du weiterhin Ollama (siehe unten), das ist nicht in die .exe eingebaut. Diktieren gibt's in der Desktop-App nicht, dafür bleibt dort alles komplett lokal.
+
+## Aus dem Quellcode starten
+
+### Voraussetzungen
 
 - [Node.js](https://nodejs.org) 20 oder neuer (empfohlen: aktuelle LTS)
 
-## Starten
+### Starten
 
 ```bash
 npm install      # nur beim ersten Mal
@@ -89,5 +103,14 @@ Alles steckt in `localnote.db` im Projektordner. Zum Sichern einfach die Datei k
 npm test           # Backend-Tests (inkl. Fake-Ollama, kein echtes Modell nötig)
 npm run typecheck  # TypeScript für Server und Client
 ```
+
+Desktop-App lokal bauen (auf Windows):
+
+```bash
+npm run dist:win   # Ergebnis in desktop/release/
+npm run desktop    # Desktop-App starten, ohne zu packen
+```
+
+Neue Version veröffentlichen: Version in `desktop/package.json` hochsetzen, Tag `vX.Y.Z` pushen. GitHub Actions baut die .exe und hängt sie ans Release.
 
 Architektur, Datenbankschema und API stehen in [`CLAUDE.md`](./CLAUDE.md).
