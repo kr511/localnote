@@ -21,9 +21,12 @@ type Recognition = {
   onend: (() => void) | null;
   onerror: ((e: { error: string }) => void) | null;
 };
-const SpeechRecognitionCtor: (new () => Recognition) | undefined =
-  (window as unknown as Record<string, unknown>).SpeechRecognition as never ??
-  (window as unknown as Record<string, unknown>).webkitSpeechRecognition as never;
+// The desktop app (Electron) exposes the API but has no speech service behind it, so hide the mic there.
+const isDesktopApp = navigator.userAgent.includes('Electron');
+const SpeechRecognitionCtor: (new () => Recognition) | undefined = isDesktopApp
+  ? undefined
+  : ((window as unknown as Record<string, unknown>).SpeechRecognition as never) ??
+    ((window as unknown as Record<string, unknown>).webkitSpeechRecognition as never);
 
 function scoreColor(score: number) {
   if (score >= 80) return 'text-emerald-300 bg-emerald-500/15 ring-emerald-500/30';

@@ -1,0 +1,71 @@
+name: Windows-App bauen
+
+on:
+  push:
+    tags: ['v*']
+  release:
+    types: [published]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            desktop/package-lock.json
+
+      - name: Abhängigkeiten installieren
+        run: npm ci
+
+      - name: Tests
+        run: npm test
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Oberfläche bauen
+        run: npm run build
+
+      - name: Desktop-Abhängigkeiten
+        working-directory: desktop
+        run: npm ci
+
+      - name: .exe bauen
+        working-directory: desktop
+        run: npm run dist:win
+
+      - name: Startet die App? (Smoke-Test)
+        shell: pwsh
+        run: |
+          $env:LOCALNOTE_DB = "$env:RUNNER_TEMP\smoke.db"
+          $p = Start-Process -FilePath "desktop\release\win-unpacked\LocalNote.exe" -PassThru
+          Start-Sleep -Seconds 20
+          $ok = Test-Path $env:LOCALNOTE_DB
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          if (-not $ok) { throw "LocalNote.exe hat die Datenbank nicht angelegt (Server nicht gestartet)" }
+          Write-Host "OK: Datenbank angelegt, Server läuft in der gepackten App"
+
+      - name: .exe als Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: LocalNote-Windows
+          path: desktop/release/*.exe
+          if-no-files-found: error
+
+      - name: Release veröffentlichen
+        if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: desktop/release/*.exe
+          generate_release_notes: true

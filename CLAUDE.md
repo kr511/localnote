@@ -11,6 +11,8 @@ npm start            # Produktion: baut den Client und startet nur den Server, A
 npm test             # Backend-Tests (Vitest + Supertest, In-Memory-DB)
 npm run typecheck    # TypeScript-Check für Server und Client
 npm run build        # Client-Build nach client/dist
+npm run desktop      # Desktop-App (Electron) starten
+npm run dist:win     # Windows-.exe bauen (Setup + portable) nach desktop/release/
 ```
 
 Umgebungsvariablen (alle optional):
@@ -46,6 +48,17 @@ localnote.db
 - **FSRS**: `server/src/srs.ts` kapselt `ts-fsrs` (Fuzz an). Der Client rechnet nichts selbst, er bekommt fällige Karten inkl. Intervall-Vorschau pro Bewertung und schickt nur die Bewertung 1 bis 4 zurück. Die Antwort enthält die aktualisierte Karte; ist sie in unter 20 Minuten wieder fällig (Lernschritte), hängt der Client sie hinten an die aktuelle Session an.
 - **Suche**: `LIKE` über eine eigene SQL-Funktion `ulower()` (registriert in `db.ts`), weil SQLites `LOWER()` keine Umlaute faltet.
 
+## Desktop-App (Windows-.exe)
+
+- `desktop/` ist **kein** npm-Workspace, sondern ein eigenständiges Paket mit eigener `package-lock.json` (Electron, electron-builder, esbuild, better-sqlite3).
+- `desktop/src/main.ts` startet über `startServer()` aus `server/src/server.ts` denselben Express-Server auf `127.0.0.1` mit freiem Port und lädt ihn in ein `BrowserWindow`. Kein IPC, kein Preload: die UI spricht wie im Browser per `fetch('/api')`.
+- `desktop/build.mjs` bündelt Main-Prozess + Server mit esbuild nach `desktop/dist/main.cjs` (extern: `electron`, `better-sqlite3`) und kopiert `client/dist` nach `desktop/dist/client`.
+- DB-Pfad in der App: `app.getPath('userData')/localnote.db` (Windows: `%APPDATA%\LocalNote`), überschreibbar mit `LOCALNOTE_DB`.
+- better-sqlite3 (ab v13) bringt N-API-Prebuilds für alle Plattformen mit. Deshalb `npmRebuild: false` in der electron-builder-Config, und die Prebuilds werden aus dem asar entpackt (`asarUnpack`).
+- Single-Instance-Lock: ein zweiter Start fokussiert das vorhandene Fenster. Externe Links öffnen im System-Browser.
+- Mikrofon im Feynman-Panel ist in Electron ausgeblendet (die Web-Speech-API hat dort keinen Dienst dahinter).
+- Release: `.github/workflows/desktop.yml` baut auf `windows-latest` bei jedem PR (Artefakt) und bei Tags `v*` (GitHub Release mit `LocalNote-Setup-x.y.z.exe` und `LocalNote-x.y.z-portable.exe`). Die .exe ist nicht code-signiert, SmartScreen warnt beim ersten Start.
+
 ## Karteikarten-Syntax
 
 | Eingabe | Ergebnis | Slots |
@@ -69,7 +82,8 @@ localnote/
 │   ├── package.json
 │   ├── tsconfig.json
 │   ├── src/
-│   │   ├── index.ts          # Einstieg: DB öffnen, App starten, in Prod client/dist ausliefern
+│   │   ├── index.ts          # CLI-Einstieg (npm run dev / npm start)
+│   │   ├── server.ts         # startServer(): DB öffnen, App starten, optional client/dist ausliefern
 │   │   ├── app.ts            # createApp(db): Express-App mit allen Routen (testbar)
 │   │   ├── db.ts             # openDb(), Schema + Migrationen
 │   │   ├── parser.ts         # re-exportiert shared/parser.ts
@@ -88,6 +102,11 @@ localnote/
 │   │       ├── feynman.ts    # Feynman-Check
 │   │       └── settings.ts   # Einstellungen (Ollama)
 │   └── test/                 # Vitest
+├── desktop/                  # Electron-Hülle, eigenständiges Paket (kein Workspace)
+│   ├── src/main.ts           # Fenster + eingebetteter Server
+│   ├── build.mjs             # esbuild-Bundle + Client kopieren
+│   └── build/icon.png        # App-Icon
+├── .github/workflows/desktop.yml  # Windows-Build + Release
 └── client/
     ├── package.json
     ├── vite.config.ts        # Proxy /api -> :3001, Tailwind-Plugin
