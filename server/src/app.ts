@@ -5,6 +5,9 @@ import { subjectsRouter } from './routes/subjects.js';
 import { pagesRouter } from './routes/pages.js';
 import { studyRouter } from './routes/study.js';
 import { searchRouter } from './routes/search.js';
+import { examsRouter } from './routes/exams.js';
+import { feynmanRouter } from './routes/feynman.js';
+import { settingsRouter } from './routes/settings.js';
 
 export function createApp(db: DB) {
   const app = express();
@@ -18,6 +21,9 @@ export function createApp(db: DB) {
   api.use(pagesRouter(db));
   api.use(studyRouter(db));
   api.use(searchRouter(db));
+  api.use(examsRouter(db));
+  api.use(feynmanRouter(db));
+  api.use(settingsRouter(db));
   api.use((_req, res) => {
     res.status(404).json({ error: 'Unbekannter Endpunkt' });
   });

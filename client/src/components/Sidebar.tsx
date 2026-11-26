@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import {
   BookOpen,
+  CalendarClock,
+  Flame,
+  Settings,
   ChevronDown,
   ChevronRight,
   FileText,
@@ -12,13 +15,14 @@ import {
   Trash2,
 } from 'lucide-react';
 import { api } from '../api';
-import type { Subject, View } from '../types';
+import type { ExamSummary, Subject, View } from '../types';
 import InlineInput from './InlineInput';
 
 interface Props {
   tree: Subject[];
   view: View;
   dueTotal: number;
+  exams: ExamSummary[];
   onNavigate: (v: View) => void;
   onChanged: () => Promise<void> | void;
   onSearch: () => void;
@@ -27,7 +31,7 @@ interface Props {
 
 type Editing = { kind: 'subject' | 'page'; id: number } | { kind: 'new-subject' } | { kind: 'new-page'; subjectId: number };
 
-export default function Sidebar({ tree, view, dueTotal, onNavigate, onChanged, onSearch, onError }: Props) {
+export default function Sidebar({ tree, view, dueTotal, exams, onNavigate, onChanged, onSearch, onError }: Props) {
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   const [editing, setEditing] = useState<Editing | null>(null);
 
@@ -47,6 +51,8 @@ export default function Sidebar({ tree, view, dueTotal, onNavigate, onChanged, o
       else n.add(id);
       return n;
     });
+
+  const nextExam = exams.find((e) => !e.isPast);
 
   const navItem = (active: boolean) =>
     `group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
@@ -76,6 +82,19 @@ export default function Sidebar({ tree, view, dueTotal, onNavigate, onChanged, o
           <span className="flex-1">Heute lernen</span>
           {dueTotal > 0 && (
             <span className="rounded-full bg-violet-500/20 px-1.5 text-xs font-medium text-violet-300">{dueTotal}</span>
+          )}
+        </button>
+        <button className={navItem(view.type === 'exams')} onClick={() => onNavigate({ type: 'exams' })}>
+          <CalendarClock size={15} />
+          <span className="flex-1">Klausuren</span>
+          {nextExam && (
+            <span
+              title={`${nextExam.title}: ${nextExam.examDate}`}
+              className={`inline-flex items-center gap-0.5 text-xs ${nextExam.cramActive ? 'text-orange-300' : 'text-zinc-500'}`}
+            >
+              {nextExam.cramActive && <Flame size={11} />}
+              {nextExam.daysLeft <= 0 ? 'heute' : `${nextExam.daysLeft} T`}
+            </span>
           )}
         </button>
       </div>
@@ -232,6 +251,13 @@ export default function Sidebar({ tree, view, dueTotal, onNavigate, onChanged, o
           </button>
         )}
       </nav>
+
+      <div className="border-t border-zinc-800/80 p-2">
+        <button className={navItem(view.type === 'settings')} onClick={() => onNavigate({ type: 'settings' })}>
+          <Settings size={15} />
+          <span className="flex-1">Einstellungen</span>
+        </button>
+      </div>
     </aside>
   );
 }

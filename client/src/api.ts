@@ -1,4 +1,18 @@
-import type { Block, DueCount, PageDetail, PageSummary, SearchResult, StudyCard, Subject } from './types';
+import type {
+  Block,
+  CramExam,
+  DueCount,
+  ExamInput,
+  ExamSummary,
+  FeynmanFeedback,
+  OllamaStatus,
+  PageDetail,
+  PageSummary,
+  SearchResult,
+  Settings,
+  StudyCard,
+  Subject,
+} from './types';
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public code?: string) {
@@ -38,9 +52,31 @@ export const api = {
     req<{ cards: Record<string, { kind: string; count: number }> }>('PUT', `/pages/${id}/blocks`, { blocks }, { keepalive }),
 
   due: (subjectId?: number) =>
-    req<{ cards: StudyCard[]; counts: DueCount[] }>('GET', `/study/due${subjectId ? `?subjectId=${subjectId}` : ''}`),
-  review: (cardId: number, rating: number) =>
-    req<{ id: number; due: string; state: number; card: StudyCard }>('POST', `/study/${cardId}/review`, { rating }),
+    req<{ cards: StudyCard[]; counts: DueCount[]; cramExams: CramExam[] }>(
+      'GET',
+      `/study/due${subjectId ? `?subjectId=${subjectId}` : ''}`,
+    ),
+  review: (cardId: number, rating: number, cram?: { examId: number }) =>
+    req<{ id: number; due: string; state: number; card: StudyCard; cram?: boolean }>(
+      'POST',
+      `/study/${cardId}/review`,
+      cram ? { rating, cram: true, examId: cram.examId } : { rating },
+    ),
+
+  exams: () => req<ExamSummary[]>('GET', '/exams'),
+  createExam: (input: ExamInput) => req<ExamSummary>('POST', '/exams', input),
+  updateExam: (id: number, patch: Partial<ExamInput> & { cramForced?: boolean }) =>
+    req<ExamSummary>('PATCH', `/exams/${id}`, patch),
+  deleteExam: (id: number) => req('DELETE', `/exams/${id}`),
+  examDue: (id: number) => req<{ exam: ExamSummary; cards: StudyCard[] }>('GET', `/exams/${id}/due`),
+  examCram: (id: number) =>
+    req<{ exam: ExamSummary; cards: (StudyCard & { cramPriority: number })[] }>('GET', `/exams/${id}/cram`),
+
+  settings: () => req<Settings>('GET', '/settings'),
+  saveSettings: (s: { ollamaUrl?: string; ollamaModel?: string }) => req<Settings>('PUT', '/settings', s),
+  feynmanStatus: () => req<OllamaStatus>('GET', '/feynman/status'),
+  feynmanCheck: (cardId: number, explanation: string) =>
+    req<FeynmanFeedback>('POST', '/feynman/check', { cardId, explanation }),
 
   search: (q: string) => req<SearchResult>('GET', `/search?q=${encodeURIComponent(q)}`),
 };
