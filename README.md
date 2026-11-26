@@ -38,9 +38,46 @@ Erkannte Karten bekommen ein kleines Badge rechts. Wenn du den Text später korr
 4. **Heute lernen**: zeigt alle fälligen Karten, auf Wunsch nach Fach gefiltert.
    - `Leertaste` Antwort zeigen
    - `1` Nochmal · `2` Schwer · `3` Gut · `4` Einfach
+   - `F` Frei erklären (Feynman-Check, siehe unten)
 5. **Strg+K** (Mac: Cmd+K) öffnet die Schnellsuche über alle Seiten und Notizen.
 
 Gespeichert wird automatisch.
+
+## Klausuren-Autopilot
+
+Unter **Klausuren** trägst du Prüfungen ein: Fach, Thema, Datum und optional nur bestimmte Seiten (sonst zählt das ganze Fach).
+
+- **Countdown** in Tagen und ein Fortschrittsbalken: *sitzt* (FSRS sagt am Klausurtag mindestens 85 % Abrufwahrscheinlichkeit voraus), *wackelig*, *neu*.
+- **Tagesziel**: heute fällige Karten aus dem Stoff plus die neuen Karten, gleichmäßig verteilt auf die Tage bis zur Klausur. Der letzte Tag bleibt frei.
+- **Lernen** fragt die regulär fälligen Karten nur aus dem Klausur-Stoff ab.
+- **Cram-Modus**: schaltet sich 48 Stunden vor der Klausur automatisch frei (eine Klausur zählt ab 8:00 Uhr am Prüfungstag), oder du schaltest ihn per Button früher frei. Dann kommen zuerst die Karten, die du zuletzt mit *Nochmal* oder *Schwer* bewertet hast, danach die wackeligen. *Nochmal* kommt nach 3 Karten wieder, *Schwer* nach 6. Cram-Bewertungen werden getrennt geloggt und **verändern deinen normalen FSRS-Plan nicht**.
+
+## Feynman-Check mit lokaler KI (Ollama)
+
+Im Lernmodus kannst du bei Frage/Antwort- und Begriffskarten vor dem Aufdecken **F** drücken (oder auf *Frei erklären* klicken) und die Antwort in eigenen Worten erklären. Eine lokale KI vergleicht das mit der Rückseite und deinen Notizen drumherum und gibt dir:
+
+- einen **Verständnis-Score** (0 bis 100 %)
+- was du **schon richtig** erklärt hast
+- was **fehlt oder ungenau** ist
+- eine **Rückfrage**, die die Lücke schließt
+
+`Strg+Enter` schickt ab. Danach ist die Karte aufgedeckt und du bewertest sie wie gewohnt mit 1 bis 4. Der Score ist ein Richtwert, keine Note: kleine lokale Modelle liegen auch mal daneben.
+
+### Einrichtung
+
+1. [Ollama](https://ollama.com/download) installieren und starten (die App läuft im Hintergrund, alternativ `ollama serve`).
+2. Ein Modell laden, z. B.:
+   ```bash
+   ollama pull qwen2.5:7b      # Standard, gutes Deutsch, braucht ca. 5 GB RAM/VRAM
+   ollama pull llama3.2        # kleiner und schneller, etwas schwächer
+   ```
+3. In LocalNote unter **Einstellungen** Adresse und Modell prüfen (*Verbindung testen*). Installierte Modelle kannst du dort per Klick auswählen.
+
+Alternativ per Umgebungsvariable beim Start: `OLLAMA_URL` (Standard `http://127.0.0.1:11434`) und `OLLAMA_MODEL` (Standard `qwen2.5:7b`). Was du in der App einstellst, hat Vorrang.
+
+Läuft Ollama nicht oder fehlt das Modell, zeigt LocalNote einen Hinweis mit dem passenden Befehl, und du lernst einfach normal weiter. Der erste Check nach dem Start kann etwas dauern, weil Ollama das Modell erst in den Speicher lädt.
+
+**Diktieren:** Wenn dein Browser die Web-Speech-API hat (Chrome, Edge), gibt's einen Mikrofon-Button. Achtung: Diese Browser schicken die Audiodaten zur Erkennung an ihre eigenen Server. Das ist der einzige Teil, der nicht lokal läuft. Wenn dir das wichtig ist, tipp einfach.
 
 ## Daten & Backup
 
@@ -49,7 +86,7 @@ Alles steckt in `localnote.db` im Projektordner. Zum Sichern einfach die Datei k
 ## Entwicklung
 
 ```bash
-npm test           # Backend-Tests
+npm test           # Backend-Tests (inkl. Fake-Ollama, kein echtes Modell nötig)
 npm run typecheck  # TypeScript für Server und Client
 ```
 

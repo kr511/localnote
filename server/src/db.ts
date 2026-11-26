@@ -71,6 +71,43 @@ const migrations: string[] = [
   );
   CREATE INDEX idx_review_logs_card ON review_logs(card_id, reviewed_at);
   `,
+  // v2: Klausuren-Autopilot, Cram-Modus, Feynman-Check
+  `
+  CREATE TABLE exams (
+    id          INTEGER PRIMARY KEY,
+    subject_id  INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+    title       TEXT NOT NULL,
+    exam_date   TEXT NOT NULL,
+    cram_forced INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX idx_exams_date ON exams(exam_date);
+
+  CREATE TABLE exam_pages (
+    exam_id INTEGER NOT NULL REFERENCES exams(id) ON DELETE CASCADE,
+    page_id INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+    PRIMARY KEY (exam_id, page_id)
+  );
+
+  ALTER TABLE review_logs ADD COLUMN is_cram INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE review_logs ADD COLUMN exam_id INTEGER REFERENCES exams(id) ON DELETE SET NULL;
+  CREATE INDEX idx_review_logs_time ON review_logs(reviewed_at);
+
+  CREATE TABLE settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+
+  CREATE TABLE feynman_attempts (
+    id          INTEGER PRIMARY KEY,
+    card_id     INTEGER NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    explanation TEXT NOT NULL,
+    score       INTEGER NOT NULL,
+    feedback    TEXT NOT NULL,
+    model       TEXT NOT NULL,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  `,
 ];
 
 export function migrate(db: DB): void {

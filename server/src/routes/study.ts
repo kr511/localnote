@@ -2,8 +2,9 @@ import { Router } from 'express';
 import type { DB } from '../db.js';
 import { h, HttpError, intParam, notFound } from '../http.js';
 import { isGrade, previewIntervals, review, type CardRow } from '../srs.js';
+import { getExam, isCramActive, type ExamRow } from '../exams.js';
 
-const CARD_SELECT = `
+export const CARD_SELECT = `
   SELECT c.*, p.title AS pageTitle, s.id AS subjectId, s.name AS subjectName
   FROM cards c
   JOIN pages p ON p.id = c.page_id
@@ -56,7 +57,18 @@ export function studyRouter(db: DB): Router {
         )
         .all(now.toISOString());
 
-      res.json({ cards: rows.map((r) => toStudyCard(r, now)), counts });
+      const cramExams = (
+        db
+          .prepare(
+            `SELECT e.*, s.name AS subjectName FROM exams e JOIN subjects s ON s.id = e.subject_id
+             WHERE e.exam_date >= date(?, '-1 day') ${subjectId ? 'AND e.subject_id = ?' : ''} ORDER BY e.exam_date`,
+          )
+          .all(...(subjectId ? [now.toISOString(), subjectId] : [now.toISOString()])) as ExamRow[]
+      )
+        .filter((e) => isCramActive(e, now))
+        .map((e) => ({ id: e.id, title: e.title, subjectId: e.subject_id, subjectName: e.subjectName, examDate: e.exam_date }));
+
+      res.json({ cards: rows.map((r) => toStudyCard(r, now)), counts, cramExams });
     }),
   );
 
@@ -70,6 +82,22 @@ export function studyRouter(db: DB): Router {
       if (!row) throw notFound('Karte');
 
       const now = new Date();
+
+      // Cram reviews: log only, never touch the FSRS schedule.
+      if (req.body?.cram === true) {
+        const examId = Number(req.body?.examId);
+        const exam = Number.isInteger(examId) ? getExam(db, examId) : undefined;
+        if (!exam) throw new HttpError(400, 'Cram-Bewertung braucht eine gültige examId');
+        if (!isCramActive(exam, now)) throw new HttpError(409, 'Cram-Modus ist für diese Klausur nicht aktiv', 'cram_inactive');
+        db.prepare(
+          `INSERT INTO review_logs (card_id, rating, state, due, stability, difficulty, scheduled_days, reviewed_at, is_cram, exam_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+        ).run(cardId, rating, row.state, row.due, row.stability, row.difficulty, row.scheduled_days, now.toISOString(), exam.id);
+        const same = db.prepare(`${CARD_SELECT} WHERE c.id = ?`).get(cardId) as StudyCardRow;
+        res.json({ id: cardId, due: row.due, state: row.state, cram: true, card: toStudyCard(same, now) });
+        return;
+      }
+
       const { fields, log } = review(row, rating, now);
       db.transaction(() => {
         db.prepare(

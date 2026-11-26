@@ -19,6 +19,10 @@ Umgebungsvariablen (alle optional):
 | --- | --- | --- |
 | `PORT` | `3001` | Port des API-Servers |
 | `LOCALNOTE_DB` | `./localnote.db` (Repo-Root) | Pfad zur SQLite-Datei |
+| `OLLAMA_URL` | `http://127.0.0.1:11434` | Ollama-Server für den Feynman-Check |
+| `OLLAMA_MODEL` | `qwen2.5:7b` | Modell für den Feynman-Check |
+
+Reihenfolge für Ollama-Einstellungen: Wert aus der Tabelle `settings` (in der App unter Einstellungen) > Umgebungsvariable > Default.
 
 ## Architektur
 
@@ -72,11 +76,17 @@ localnote/
 │   │   ├── http.ts           # HttpError, Validierungshelfer, Error-Middleware
 │   │   ├── srs.ts            # FSRS-Wrapper (ts-fsrs)
 │   │   ├── cards.ts          # syncPageCards(): Blöcke -> Karten
+│   │   ├── exams.ts          # Klausur-Statistik: Scope, Fortschritt, Tagesziel, Cram-Priorität
+│   │   ├── ollama.ts         # Ollama-Client (Status, Chat mit JSON-Schema, freundliche Fehler)
+│   │   ├── feynman.ts        # Prompt bauen, Antwort validieren
 │   │   └── routes/
 │   │       ├── subjects.ts   # Fächer CRUD
 │   │       ├── pages.ts      # Seiten CRUD + Blöcke speichern
 │   │       ├── study.ts      # fällige Karten, Bewertung
-│   │       └── search.ts     # Strg+K-Suche
+│   │       ├── search.ts     # Strg+K-Suche
+│   │       ├── exams.ts      # Klausuren CRUD, Übersicht, Cram-Warteschlange
+│   │       ├── feynman.ts    # Feynman-Check
+│   │       └── settings.ts   # Einstellungen (Ollama)
 │   └── test/                 # Vitest
 └── client/
     ├── package.json
@@ -95,6 +105,10 @@ localnote/
             ├── StudyView.tsx     # "Heute lernen"
             ├── SearchPalette.tsx # Strg+K
             ├── Home.tsx          # Startseite / leerer Zustand
+            ├── ExamsView.tsx     # Klausuren: Countdown, Fortschritt, Tagesziel, Cram
+            ├── ExamForm.tsx      # Klausur anlegen/bearbeiten
+            ├── FeynmanPanel.tsx  # "Frei erklären" im Lernmodus (Text + optional Mikrofon)
+            ├── SettingsView.tsx  # Ollama-URL/Modell, Verbindungstest
             └── InlineInput.tsx   # Anlegen/Umbenennen in der Sidebar
 ```
 
@@ -161,6 +175,40 @@ CREATE TABLE review_logs (
 );
 ```
 
+### Migration 2: Klausuren, Cram, Feynman
+
+```sql
+CREATE TABLE exams (
+  id          INTEGER PRIMARY KEY,
+  subject_id  INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+  title       TEXT NOT NULL,
+  exam_date   TEXT NOT NULL,               -- 'YYYY-MM-DD', lokales Datum
+  cram_forced INTEGER NOT NULL DEFAULT 0,  -- Cram manuell freigeschaltet
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE exam_pages (                  -- leer = ganzes Fach
+  exam_id INTEGER NOT NULL REFERENCES exams(id) ON DELETE CASCADE,
+  page_id INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+  PRIMARY KEY (exam_id, page_id)
+);
+
+ALTER TABLE review_logs ADD COLUMN is_cram INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE review_logs ADD COLUMN exam_id INTEGER REFERENCES exams(id) ON DELETE SET NULL;
+
+CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+
+CREATE TABLE feynman_attempts (
+  id          INTEGER PRIMARY KEY,
+  card_id     INTEGER NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+  explanation TEXT NOT NULL,
+  score       INTEGER NOT NULL,
+  feedback    TEXT NOT NULL,               -- JSON {correct[], missing[], question}
+  model       TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+```
+
 Indizes: `blocks(page_id, position)`, `cards(due)`, `cards(page_id)`, `review_logs(card_id, reviewed_at)`.
 Migrationen laufen über `PRAGMA user_version` in `db.ts` (jede Version ein SQL-Block, nur vorwärts).
 
@@ -181,6 +229,41 @@ Migrationen laufen über `PRAGMA user_version` in `db.ts` (jede Version ein SQL-
 | POST | `/study/:cardId/review` | `{rating: 1..4}` -> FSRS, speichert Karte + Log, gibt `{due, state, card}` zurück |
 | GET | `/search?q=` | Treffer in Seitentiteln und Blöcken (leeres `q`: zuletzt bearbeitete Seiten) |
 | GET | `/health` | `{ok: true}` |
+
+| GET | `/exams` | alle Klausuren inkl. Countdown, Fortschritt, Tagesziel, Cram-Status |
+| POST | `/exams` | `{subjectId, title, examDate: 'YYYY-MM-DD', pageIds?: number[]}` |
+| PATCH | `/exams/:id` | Teilupdate, auch `{cramForced: boolean}` |
+| DELETE | `/exams/:id` | |
+| GET | `/exams/:id/due` | regulär fällige Karten (FSRS) nur aus dem Klausur-Stoff |
+| GET | `/exams/:id/cram` | Cram-Warteschlange (409, wenn Cram nicht aktiv) |
+| POST | `/study/:cardId/review` | zusätzlich `{cram: true, examId}`: nur Log, FSRS-Zustand bleibt unangetastet |
+| GET | `/settings` | effektive Ollama-Einstellungen + Quelle (db/env/default) |
+| PUT | `/settings` | `{ollamaUrl?, ollamaModel?}`, leerer String setzt zurück |
+| GET | `/feynman/status` | erreicht Ollama? Modell installiert? Liste der Modelle |
+| POST | `/feynman/check` | `{cardId, explanation}` -> `{score, correct[], missing[], question, model}` |
+
+## Klausuren-Autopilot
+
+- **Zeitpunkt**: Eine Klausur gilt als am `exam_date` um 08:00 Uhr Ortszeit (Server-Zeit = Rechner des Nutzers).
+- **Stoff (Scope)**: verknüpfte Seiten aus `exam_pages`, sonst alle Seiten des Fachs.
+- **Fortschritt** pro Karte im Scope:
+  - `neu`: noch nie gelernt (State New)
+  - `sitzt`: State Review und vorhergesagte Abrufwahrscheinlichkeit (FSRS-Retrievability) **am Klausurtag** ≥ 85 %, falls bis dahin nicht mehr wiederholt wird
+  - `wackelig`: alles andere
+- **Tagesziel**: `heute fällig im Scope + ceil(neue Karten / Planungstage)`, mit `Planungstage = max(1, Tage bis Klausur - 1)`. Der letzte Tag bleibt frei für Wiederholung/Cram. `heute erledigt` zählt verschiedene Karten im Scope mit Review heute (auch Cram).
+- **Cram-Modus** ist aktiv, wenn die Klausur in ≤ 48 Stunden ist (und noch nicht vorbei) oder `cram_forced = 1`.
+  - Reihenfolge: zuletzt mit 1 bewertet > zuletzt mit 2 bewertet > Learning/Relearning oder wackelig > neu > Rest. Innerhalb eines Topfs nach aktueller Retrievability aufsteigend.
+  - Cram-Bewertungen landen nur in `review_logs` mit `is_cram = 1` und ändern **nie** Stabilität, Schwierigkeit oder Fälligkeit. Das reguläre FSRS-Intervall bleibt intakt, "Heute lernen" läuft normal weiter.
+  - In der Session: 1 kommt nach 3 Karten wieder, 2 nach 6 Karten, 3/4 ist für diese Runde erledigt.
+
+## Feynman-Check (Ollama)
+
+- Im Lernmodus bei `basic`- und `reverse`-Karten: Taste `F` (vor dem Aufdecken) öffnet "Frei erklären". Mikrofon über die Web-Speech-API, falls der Browser sie hat (Chrome/Edge), sonst nur Textfeld. Achtung: Chrome/Edge schicken die Audiodaten an ihre Server, das steht so auch im Tooltip und in der README.
+- Server baut den Prompt aus Vorderseite, Rückseite (Musterlösung) und Kontext-Notizen: Elternblöcke und direkte Unterpunkte des Kartenblocks (max. 12 Zeilen).
+- Aufruf: `POST {OLLAMA_URL}/api/chat` mit `stream: false`, `format` = JSON-Schema, `temperature 0.2`, Timeout 120 s. Die Schülererklärung steht als Daten im Prompt, Anweisungen darin werden ignoriert.
+- Antwort wird validiert und geklemmt (Score 0 bis 100, Listen max. 6 Einträge). Ergebnis wird in `feynman_attempts` gespeichert.
+- Fehler sind nie ein Absturz, sondern `503/504/502` mit `code`: `ollama_offline`, `model_missing`, `ollama_timeout`, `ollama_bad_response`, die der Client freundlich anzeigt.
+- Tests nutzen einen Fake-Ollama-Server (`server/test/fake-ollama.ts`), kein echtes Modell nötig.
 
 ## Konventionen
 
